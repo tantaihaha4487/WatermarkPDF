@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f8fb" />
+    <title>WatermarkPDF — Centered PDF watermarking</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;700&family=Noto+Sans+Thai:wght@400&family=Prompt:wght@400&family=Roboto:wght@400&family=Sarabun:wght@400&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="WatermarkPDF home">
+          <span class="brand-mark" aria-hidden="true">W</span>
+          <span>
+            <span class="brand-name">WatermarkPDF</span>
+            <span class="brand-tagline">A quiet signature for every page</span>
+          </span>
+        </a>
+        <div class="topbar-note"><span class="secure-dot"></span> Private by design</div>
+      </header>
+
+      <main class="workspace">
+        <section class="control-panel" aria-label="Watermark controls">
+          <div class="panel-intro">
+            <p class="eyebrow">PDF WATERMARK STUDIO</p>
+            <h1>Make your document unmistakably yours.</h1>
+            <p class="intro-copy">Drop in a PDF, tune the mark, and export a crisp vector watermark in a few seconds.</p>
+          </div>
+
+          <div class="control-card upload-card">
+            <div class="section-heading">
+              <div>
+                <p class="section-kicker">01</p>
+                <h2>Choose a PDF</h2>
+              </div>
+              <span class="file-limit">50 MB max</span>
+            </div>
+            <label class="dropzone" id="dropzone" for="file-input" tabindex="0">
+              <input id="file-input" type="file" accept="application/pdf,.pdf" />
+              <span class="upload-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 20h14" />
+                </svg>
+              </span>
+              <span class="drop-title">Drop your PDF here</span>
+              <span class="drop-subtitle">or <span class="browse-link">browse files</span></span>
+            </label>
+            <div class="file-summary" id="file-summary" hidden>
+              <span class="pdf-badge">PDF</span>
+              <span class="file-summary-copy">
+                <strong id="file-name">No file selected</strong>
+                <span id="file-meta">—</span>
+              </span>
+              <button class="icon-button" id="remove-file" type="button" aria-label="Remove PDF">×</button>
+            </div>
+          </div>
+
+          <div class="control-card settings-card" id="settings-card" aria-disabled="true">
+            <div class="section-heading">
+              <div>
+                <p class="section-kicker">02</p>
+                <h2>Shape your watermark</h2>
+              </div>
+              <span class="live-indicator"><span></span> Live</span>
+            </div>
+
+            <div class="field-group">
+              <label for="watermark-text">Watermark text</label>
+              <textarea id="watermark-text" rows="3" maxlength="5000" spellcheck="false">WatermarkPDF</textarea>
+              <p class="field-hint">Each line stays centered on the same axis.</p>
+            </div>
+
+            <div class="field-row">
+              <div class="field-group compact-field">
+                <label for="opacity-range">Opacity <output id="opacity-value">30%</output></label>
+                <input id="opacity-range" type="range" min="0" max="100" step="1" value="30" />
+              </div>
+              <div class="field-group compact-field">
+                <label for="rotation-range">Rotation <output id="rotation-value">315°</output></label>
+                <input id="rotation-range" type="range" min="0" max="360" step="1" value="315" />
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field-group">
+                <label for="font-select">Font</label>
+                <select id="font-select" aria-describedby="font-hint"></select>
+                <p class="field-hint" id="font-hint">Server fonts load from bundled TTF files.</p>
+              </div>
+              <div class="field-group size-field">
+                <label for="font-size">Size</label>
+                <div class="number-with-unit"><input id="font-size" type="number" min="8" max="200" step="1" value="40" /><span>pt</span></div>
+              </div>
+            </div>
+
+            <div class="field-group color-field">
+              <label>Color</label>
+              <div class="color-controls">
+                <div class="swatches" role="group" aria-label="Preset colors">
+                  <button class="swatch selected" type="button" data-color="#808080" aria-label="Gray" aria-pressed="true" style="--swatch: #808080"></button>
+                  <button class="swatch" type="button" data-color="#000000" aria-label="Black" aria-pressed="false" style="--swatch: #000000"></button>
+                  <button class="swatch" type="button" data-color="#E53E3E" aria-label="Red" aria-pressed="false" style="--swatch: #E53E3E"></button>
+                  <button class="swatch" type="button" data-color="#1D4ED8" aria-label="Blue" aria-pressed="false" style="--swatch: #1D4ED8"></button>
+                  <button class="swatch" type="button" data-color="#1D9E75" aria-label="Teal" aria-pressed="false" style="--swatch: #1D9E75"></button>
+                </div>
+                <label class="custom-color" for="color-picker"><input id="color-picker" type="color" value="#808080" /><span>Custom</span></label>
+              </div>
+              <output class="hex-value" id="color-value">#808080</output>
+            </div>
+          </div>
+
+          <div class="privacy-note">
+            <span class="lock-icon" aria-hidden="true">⌑</span>
+            <span>Files stay in a short-lived server temp folder and are swept after one hour.</span>
+          </div>
+        </section>
+
+        <section class="preview-panel" aria-label="PDF preview">
+          <div class="preview-header">
+            <div>
+              <p class="eyebrow">PREVIEW</p>
+              <h2 id="preview-title">See it before you send it.</h2>
+            </div>
+            <div class="renderer-status" id="renderer-status" aria-live="polite">
+              <span class="renderer-status-dot"></span>
+              <span id="renderer-status-text">Instant preview</span>
+            </div>
+          </div>
+
+          <div class="pdf-info" id="pdf-info" hidden>
+            <span class="status-pill"><span class="status-pill-dot"></span> PDF loaded</span>
+            <span id="page-info">—</span>
+          </div>
+
+          <div class="preview-card">
+            <div class="preview-empty" id="preview-empty">
+              <div class="empty-mark" aria-hidden="true">✦</div>
+              <h3>Your preview will appear here</h3>
+              <p>Upload a PDF to see the watermark in context.</p>
+            </div>
+            <div class="pdf-stage" id="pdf-stage" hidden>
+              <div class="pdf-pages" id="pdf-pages" aria-label="All pages of uploaded PDF"></div>
+            </div>
+            <div class="preview-caption" id="preview-caption" hidden><span id="preview-page-count">All pages</span><span id="preview-caption-note">Live while you edit · exact check runs automatically</span></div>
+          </div>
+
+          <div class="preview-actions">
+            <button class="secondary-button" id="refresh-preview" type="button" disabled><span class="button-icon">↻</span> Refresh exact check</button>
+            <button class="primary-button" id="generate-button" type="button" disabled><span id="generate-label">Apply &amp; Download</span><span class="arrow-icon" aria-hidden="true">→</span></button>
+          </div>
+          <p class="status-message" id="status-message" role="status" aria-live="polite"></p>
+        </section>
+      </main>
+
+      <footer class="footer"><span>Centered by math, rendered as vector.</span><span>WatermarkPDF · v1</span></footer>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
