@@ -13,11 +13,12 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .fonts import available_fonts
+from .images import UnsupportedImageError, image_to_pdf
 from .watermark import WatermarkSettings, get_pdf_info, render_preview_png, watermark_pdf
 
 logger = logging.getLogger("watermarkpdf")
@@ -65,7 +66,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="WatermarkPDF", description="Centered PDF watermark utility", lifespan=lifespan)
+app = FastAPI(title="WatermarkPDF", description="Centered document watermark utility", lifespan=lifespan)
 
 
 class WatermarkRequest(BaseModel):
@@ -91,10 +92,10 @@ class WatermarkRequest(BaseModel):
 def _path_for_file(file_id: UUID) -> Path:
     value = str(file_id)
     if not FILE_ID_RE.fullmatch(value):
-        raise HTTPException(status_code=404, detail="Uploaded PDF not found.")
+        raise HTTPException(status_code=404, detail="Uploaded file not found.")
     path = UPLOAD_ROOT / f"{value}.pdf"
     if not path.is_file():
-        raise HTTPException(status_code=404, detail="Uploaded PDF not found or has expired.")
+        raise HTTPException(status_code=404, detail="Uploaded file not found or has expired.")
     return path
 
 
@@ -118,16 +119,19 @@ def fonts_endpoint() -> list[dict[str, object]]:
 
 
 @app.post("/api/upload")
-async def upload_pdf(file: Annotated[UploadFile, File(...)]) -> dict[str, object]:
+async def upload_document(file: Annotated[UploadFile, File(...)]) -> dict[str, object]:
     filename = file.filename or "document.pdf"
     file_id = uuid4()
     target = UPLOAD_ROOT / f"{file_id}.pdf"
+    incoming = UPLOAD_ROOT / f"{file_id}.upload"
     bytes_written = 0
     first_chunk = b""
+    source_type = "pdf"
+    source_format = "PDF"
 
     UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
     try:
-        with target.open("wb") as output:
+        with incoming.open("wb") as output:
             while True:
                 chunk = await file.read(1024 * 1024)
                 if not chunk:
@@ -136,28 +140,62 @@ async def upload_pdf(file: Annotated[UploadFile, File(...)]) -> dict[str, object
                     first_chunk = chunk[:16]
                 bytes_written += len(chunk)
                 if bytes_written > MAX_UPLOAD_BYTES:
-                    raise HTTPException(status_code=413, detail="PDF must be 50 MB or smaller.")
+                    raise HTTPException(status_code=413, detail="Files must be 50 MB or smaller.")
                 output.write(chunk)
 
-        if not first_chunk.startswith(b"%PDF-"):
-            raise HTTPException(status_code=400, detail="Please upload a valid PDF file.")
+        if first_chunk.startswith(b"%PDF-"):
+            incoming.replace(target)
+        else:
+            source_format, _ = image_to_pdf(incoming, target)
+            source_type = "image"
 
         page_count, pages = get_pdf_info(target)
     except HTTPException:
         target.unlink(missing_ok=True)
         raise
+    except UnsupportedImageError as exc:
+        target.unlink(missing_ok=True)
+        logger.info("Rejected uploaded file %s: %s", filename, exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         target.unlink(missing_ok=True)
         logger.info("Rejected uploaded file %s: %s", filename, exc)
-        raise HTTPException(status_code=400, detail=f"Could not read this PDF: {exc}") from exc
+        raise HTTPException(status_code=400, detail=f"Could not read this file: {exc}") from exc
     finally:
+        incoming.unlink(missing_ok=True)
         await file.close()
 
     # Keep the original name beside the short-lived PDF so downloads can use
     # a helpful filename without storing user data outside the temp directory.
     metadata_path = UPLOAD_ROOT / f"{file_id}.json"
-    metadata_path.write_text(json.dumps({"filename": filename}), encoding="utf-8")
-    return {"file_id": str(file_id), "page_count": page_count, "pages": pages}
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "filename": filename,
+                "source_type": source_type,
+                "source_format": source_format,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "file_id": str(file_id),
+        "page_count": page_count,
+        "pages": pages,
+        "source_type": source_type,
+        "source_format": source_format,
+    }
+
+
+@app.get("/api/document/{file_id}")
+def uploaded_document(file_id: UUID) -> FileResponse:
+    """Serve the normalized PDF used by the browser's PDF.js preview."""
+
+    return FileResponse(
+        _path_for_file(file_id),
+        media_type="application/pdf",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.post("/api/preview")

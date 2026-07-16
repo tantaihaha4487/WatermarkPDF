@@ -52,6 +52,7 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .browse-link { color: var(--accent); font-weight: 700; }
 .file-summary { display: flex; align-items: center; gap: 11px; min-height: 58px; padding: 10px 11px; border: 1px solid #dce4f8; background: #f5f7ff; border-radius: 11px; }
 .pdf-badge { display: grid; place-items: center; width: 35px; height: 35px; border-radius: 8px; color: #c73d4c; background: #fff0f1; font-size: 9px; font-weight: 800; letter-spacing: .05em; }
+.pdf-badge.image-badge { color: #28735d; background: #eaf8f2; }
 .file-summary-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 3px; }
 .file-summary-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .file-summary-copy span { color: var(--muted); font-size: 11px; }

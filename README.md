@@ -1,6 +1,6 @@
 # WatermarkPDF
 
-WatermarkPDF is a self-hosted FastAPI utility that adds a crisp, centered text watermark to every page of a PDF. It has no frontend build step: FastAPI serves the plain HTML/CSS/JavaScript editor, PDF.js renders every page in a scrollable instant preview, and an exact server check runs automatically in the background using the same ReportLab + pypdfium2 pipeline as the final download.
+WatermarkPDF is a self-hosted FastAPI utility that adds a crisp, centered text watermark to every page of a PDF or raster image. JPEG, PNG, WebP, TIFF, GIF, and BMP uploads are normalized to PDF first; animated GIF frames and multi-page TIFFs become separate pages. It has no frontend build step: FastAPI serves the plain HTML/CSS/JavaScript editor, PDF.js renders every page in a scrollable instant preview, and an exact server check runs automatically in the background using the same ReportLab + pypdfium2 pipeline as the final download.
 
 ## Run it
 
@@ -18,7 +18,8 @@ For each page, the renderer reads that page's own media-box width and height, tr
 
 ## API
 
-- `POST /api/upload` — multipart PDF upload; returns a UUID, page count, and dimensions for every page.
+- `POST /api/upload` — multipart PDF or image upload; returns a UUID, source format, page count, and dimensions for every page.
+- `GET /api/document/{file_id}` — returns the short-lived normalized PDF used by the browser preview.
 - `POST /api/preview` — JSON watermark settings; returns a PNG of the watermarked first page.
 - `POST /api/generate` — JSON watermark settings; returns the complete watermarked PDF download.
 - `GET /api/fonts` — returns the locally registered server fonts and Thai capability.
@@ -27,4 +28,4 @@ Uploads are written only to `/tmp/watermarkpdf-uploads`, removed on server start
 
 ## Verification checklist
 
-The renderer can be exercised without a browser by creating a sample PDF with `reportlab`, uploading it, and calling `/api/preview` and `/api/generate`. Check the single-line default, a two-line string, Thai text with both Kanit and Sarabun, mixed page sizes, and rotations `0` and `90`. The output remains vector text in the PDF overlay; pypdfium2 is used only to rasterize the server preview PNG.
+The renderer can be exercised without a browser by creating a sample PDF with `reportlab` or a sample image with Pillow, uploading it, and calling `/api/preview` and `/api/generate`. Check the single-line default, a two-line string, Thai text with both Kanit and Sarabun, mixed page sizes, transparent and EXIF-rotated images, and rotations `0` and `90`. The watermark remains vector text in the PDF overlay; pypdfium2 is used only to rasterize the server preview PNG.

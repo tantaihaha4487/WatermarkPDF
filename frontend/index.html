@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#f7f8fb" />
-    <title>WatermarkPDF — Centered PDF watermarking</title>
+    <title>WatermarkPDF — Centered document watermarking</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;700&family=Noto+Sans+Thai:wght@400&family=Prompt:wght@400&family=Roboto:wght@400&family=Sarabun:wght@400&display=swap" rel="stylesheet" />
@@ -26,36 +26,36 @@
       <main class="workspace">
         <section class="control-panel" aria-label="Watermark controls">
           <div class="panel-intro">
-            <p class="eyebrow">PDF WATERMARK STUDIO</p>
+            <p class="eyebrow">DOCUMENT WATERMARK STUDIO</p>
             <h1>Make your document unmistakably yours.</h1>
-            <p class="intro-copy">Drop in a PDF, tune the mark, and export a crisp vector watermark in a few seconds.</p>
+            <p class="intro-copy">Drop in a PDF or image, tune the mark, and export a crisp watermarked PDF in a few seconds.</p>
           </div>
 
           <div class="control-card upload-card">
             <div class="section-heading">
               <div>
                 <p class="section-kicker">01</p>
-                <h2>Choose a PDF</h2>
+                <h2>Choose a file</h2>
               </div>
               <span class="file-limit">50 MB max</span>
             </div>
             <label class="dropzone" id="dropzone" for="file-input" tabindex="0">
-              <input id="file-input" type="file" accept="application/pdf,.pdf" />
+              <input id="file-input" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/tiff,image/gif,image/bmp,.pdf,.jpg,.jpeg,.png,.webp,.tif,.tiff,.gif,.bmp" />
               <span class="upload-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 20h14" />
                 </svg>
               </span>
-              <span class="drop-title">Drop your PDF here</span>
-              <span class="drop-subtitle">or <span class="browse-link">browse files</span></span>
+              <span class="drop-title">Drop your PDF or image here</span>
+              <span class="drop-subtitle">JPEG, PNG, WebP, TIFF, GIF, BMP · or <span class="browse-link">browse files</span></span>
             </label>
             <div class="file-summary" id="file-summary" hidden>
-              <span class="pdf-badge">PDF</span>
+              <span class="pdf-badge" id="file-badge">PDF</span>
               <span class="file-summary-copy">
                 <strong id="file-name">No file selected</strong>
                 <span id="file-meta">—</span>
               </span>
-              <button class="icon-button" id="remove-file" type="button" aria-label="Remove PDF">×</button>
+              <button class="icon-button" id="remove-file" type="button" aria-label="Remove file">×</button>
             </div>
           </div>
 
@@ -119,7 +119,7 @@
           </div>
         </section>
 
-        <section class="preview-panel" aria-label="PDF preview">
+        <section class="preview-panel" aria-label="Document preview">
           <div class="preview-header">
             <div>
               <p class="eyebrow">PREVIEW</p>
@@ -132,7 +132,7 @@
           </div>
 
           <div class="pdf-info" id="pdf-info" hidden>
-            <span class="status-pill"><span class="status-pill-dot"></span> PDF loaded</span>
+            <span class="status-pill"><span class="status-pill-dot"></span> File loaded</span>
             <span id="page-info">—</span>
           </div>
 
@@ -140,17 +140,17 @@
             <div class="preview-empty" id="preview-empty">
               <div class="empty-mark" aria-hidden="true">✦</div>
               <h3>Your preview will appear here</h3>
-              <p>Upload a PDF to see the watermark in context.</p>
+              <p>Upload a PDF or image to see the watermark in context.</p>
             </div>
             <div class="pdf-stage" id="pdf-stage" hidden>
-              <div class="pdf-pages" id="pdf-pages" aria-label="All pages of uploaded PDF"></div>
+              <div class="pdf-pages" id="pdf-pages" aria-label="All pages of uploaded document"></div>
             </div>
             <div class="preview-caption" id="preview-caption" hidden><span id="preview-page-count">All pages</span><span id="preview-caption-note">Live while you edit · exact check runs automatically</span></div>
           </div>
 
           <div class="preview-actions">
             <button class="secondary-button" id="refresh-preview" type="button" disabled><span class="button-icon">↻</span> Refresh exact check</button>
-            <button class="primary-button" id="generate-button" type="button" disabled><span id="generate-label">Apply &amp; Download</span><span class="arrow-icon" aria-hidden="true">→</span></button>
+            <button class="primary-button" id="generate-button" type="button" disabled><span id="generate-label">Apply &amp; Download PDF</span><span class="arrow-icon" aria-hidden="true">→</span></button>
           </div>
           <p class="status-message" id="status-message" role="status" aria-live="polite"></p>
         </section>
@@ -160,6 +160,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="/app.js"></script>
+    <script src="/app.js?v=images-1"></script>
   </body>
 </html>

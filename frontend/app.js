@@ -1,6 +1,16 @@
 /* global pdfjsLib */
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const SUPPORTED_FILE_EXTENSIONS = /\.(pdf|jpe?g|png|webp|tiff?|gif|bmp)$/i;
+const SUPPORTED_FILE_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/tiff",
+  "image/gif",
+  "image/bmp",
+]);
 
 const elements = {
   fileInput: document.querySelector("#file-input"),
@@ -8,6 +18,7 @@ const elements = {
   fileSummary: document.querySelector("#file-summary"),
   fileName: document.querySelector("#file-name"),
   fileMeta: document.querySelector("#file-meta"),
+  fileBadge: document.querySelector("#file-badge"),
   removeFile: document.querySelector("#remove-file"),
   settingsCard: document.querySelector("#settings-card"),
   text: document.querySelector("#watermark-text"),
@@ -184,9 +195,11 @@ async function loadFonts() {
   }
 }
 
-async function loadClientPdf(file) {
+async function loadClientPdf(fileId) {
   if (!window.pdfjsLib) throw new Error("PDF.js could not be loaded from the CDN.");
-  const buffer = await file.arrayBuffer();
+  const response = await fetch(`/api/document/${encodeURIComponent(fileId)}`, { cache: "no-store" });
+  if (!response.ok) throw new Error(await readError(response));
+  const buffer = await response.arrayBuffer();
   state.pdfDocument = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
 }
 
@@ -215,7 +228,7 @@ async function renderAllPages() {
 
     const canvas = document.createElement("canvas");
     canvas.className = "pdf-page-canvas";
-    canvas.setAttribute("aria-label", `Page ${pageNumber} of uploaded PDF`);
+    canvas.setAttribute("aria-label", `Page ${pageNumber} of uploaded document`);
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
     canvas.style.width = `${Math.ceil(viewport.width)}px`;
@@ -243,15 +256,16 @@ async function renderAllPages() {
 async function uploadFile(file) {
   if (!file) return;
   if (file.size > MAX_UPLOAD_BYTES) {
-    showStatus("That PDF is larger than 50 MB.", "error");
+    showStatus("That file is larger than 50 MB.", "error");
     return;
   }
-  if (file.type && file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-    showStatus("Please choose a PDF file.", "error");
+  const isImageType = file.type.startsWith("image/");
+  if (!SUPPORTED_FILE_TYPES.has(file.type) && !isImageType && !SUPPORTED_FILE_EXTENSIONS.test(file.name)) {
+    showStatus("Please choose a PDF, JPEG, PNG, WebP, TIFF, GIF, or BMP file.", "error");
     return;
   }
 
-  showStatus("Reading your PDF…");
+  showStatus("Reading your file…");
   setControlsEnabled(false);
   try {
     const formData = new FormData();
@@ -264,6 +278,8 @@ async function uploadFile(file) {
     state.pages = data.pages;
     elements.fileName.textContent = file.name;
     elements.fileMeta.textContent = `${formatBytes(file.size)} · ${data.page_count} ${data.page_count === 1 ? "page" : "pages"}`;
+    elements.fileBadge.textContent = data.source_type === "image" ? "IMG" : "PDF";
+    elements.fileBadge.classList.toggle("image-badge", data.source_type === "image");
     elements.fileSummary.hidden = false;
     elements.dropzone.hidden = true;
     elements.pdfInfo.hidden = false;
@@ -272,14 +288,14 @@ async function uploadFile(file) {
     elements.pdfStage.hidden = false;
     elements.previewCaption.hidden = false;
     setControlsEnabled(true);
-    await loadClientPdf(file);
+    await loadClientPdf(data.file_id);
     await renderAllPages();
-    showStatus("PDF ready. Adjust the mark to your liking.", "success");
+    showStatus(`${data.source_type === "image" ? data.source_format : "PDF"} ready. Adjust the mark to your liking.`, "success");
     setRendererStatus("Updating exact check…", "pending");
     requestServerPreview();
   } catch (error) {
     resetFile(false);
-    showStatus(error.message || "Could not upload that PDF.", "error");
+    showStatus(error.message || "Could not upload that file.", "error");
   }
 }
 
@@ -293,6 +309,8 @@ function resetFile(showMessage = true) {
   state.pdfDocument = null;
   elements.fileInput.value = "";
   elements.fileSummary.hidden = true;
+  elements.fileBadge.textContent = "PDF";
+  elements.fileBadge.classList.remove("image-badge");
   elements.dropzone.hidden = false;
   elements.pdfInfo.hidden = true;
   elements.previewEmpty.hidden = false;
@@ -301,7 +319,7 @@ function resetFile(showMessage = true) {
   elements.pages.replaceChildren();
   setControlsEnabled(false);
   setRendererStatus("Instant preview", "ready");
-  if (showMessage) showStatus("PDF removed. Choose another file when you are ready.");
+  if (showMessage) showStatus("File removed. Choose another when you are ready.");
 }
 
 async function requestServerPreview() {
@@ -379,7 +397,7 @@ async function generatePdf() {
   } catch (error) {
     showStatus(error.message || "Could not generate the PDF.", "error");
   } finally {
-    elements.generateLabel.textContent = "Apply & Download";
+    elements.generateLabel.textContent = "Apply & Download PDF";
     updateActionButtons();
   }
 }
