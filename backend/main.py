@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import logging
 import re
@@ -15,6 +16,7 @@ from uuid import UUID, uuid4
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pypdf import PdfReader, PdfWriter
 from pydantic import BaseModel, Field
 
 from .fonts import available_fonts
@@ -69,6 +71,12 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="WatermarkPDF", description="Centered document watermark utility", lifespan=lifespan)
 
 
+class PageOrderItem(BaseModel):
+    source_page: int | None = Field(None, ge=1)
+    image_id: UUID | None = None
+    image_page: int | None = Field(None, ge=1)
+
+
 class WatermarkRequest(BaseModel):
     file_id: UUID
     text: str = Field(..., max_length=5000)
@@ -77,6 +85,7 @@ class WatermarkRequest(BaseModel):
     font: str = "Kanit"
     font_size: float = 40.0
     color: str = "#808080"
+    page_order: list[PageOrderItem] | None = Field(None, max_length=500)
 
     def settings(self) -> WatermarkSettings:
         return WatermarkSettings.normalized(
@@ -99,6 +108,16 @@ def _path_for_file(file_id: UUID) -> Path:
     return path
 
 
+def _path_for_inserted_image(image_id: UUID) -> Path:
+    value = str(image_id)
+    if not FILE_ID_RE.fullmatch(value):
+        raise HTTPException(status_code=404, detail="Inserted image pages not found.")
+    path = UPLOAD_ROOT / f"{value}.inserted.pdf"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Inserted image pages not found or have expired.")
+    return path
+
+
 def _safe_download_stem(filename: str | None) -> str:
     original = Path(filename or "document.pdf").name
     stem = Path(original).stem or "document"
@@ -111,6 +130,61 @@ def _settings_or_422(request: WatermarkRequest) -> WatermarkSettings:
         return request.settings()
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _document_for_request(request: WatermarkRequest) -> Path | bytes:
+    """Build the requested source/inserted-page order before watermarking."""
+
+    source_path = _path_for_file(request.file_id)
+    if request.page_order is None:
+        return source_path
+    if not request.page_order:
+        raise HTTPException(status_code=422, detail="The document must contain at least one page.")
+
+    source_reader = PdfReader(io.BytesIO(source_path.read_bytes()), strict=False)
+    inserted_readers: dict[UUID, PdfReader] = {}
+    seen_source_pages: list[int] = []
+    seen_inserted_pages: set[tuple[UUID, int]] = set()
+    writer = PdfWriter()
+    for item in request.page_order:
+        is_source = item.source_page is not None
+        is_inserted = item.image_id is not None or item.image_page is not None
+        if is_source == is_inserted:
+            raise HTTPException(
+                status_code=422,
+                detail="Each page-order item must identify one source page or one inserted image page.",
+            )
+        if is_source:
+            page_index = item.source_page - 1
+            if page_index >= len(source_reader.pages):
+                raise HTTPException(status_code=422, detail="Page order references a source page that does not exist.")
+            seen_source_pages.append(item.source_page)
+            writer.add_page(source_reader.pages[page_index])
+            continue
+
+        if item.image_id is None or item.image_page is None:
+            raise HTTPException(status_code=422, detail="Inserted page references are incomplete.")
+        reader = inserted_readers.get(item.image_id)
+        if reader is None:
+            inserted_path = _path_for_inserted_image(item.image_id)
+            reader = PdfReader(io.BytesIO(inserted_path.read_bytes()), strict=False)
+            inserted_readers[item.image_id] = reader
+        page_index = item.image_page - 1
+        if page_index >= len(reader.pages):
+            raise HTTPException(status_code=422, detail="Page order references an inserted image page that does not exist.")
+        inserted_page_key = (item.image_id, item.image_page)
+        if inserted_page_key in seen_inserted_pages:
+            raise HTTPException(status_code=422, detail="Page order cannot repeat an inserted image page.")
+        seen_inserted_pages.add(inserted_page_key)
+        writer.add_page(reader.pages[page_index])
+
+    expected_source_pages = list(range(1, len(source_reader.pages) + 1))
+    if sorted(seen_source_pages) != expected_source_pages:
+        raise HTTPException(status_code=422, detail="Page order must include every source page exactly once.")
+
+    output = io.BytesIO()
+    writer.write(output)
+    return output.getvalue()
 
 
 @app.get("/api/fonts")
@@ -187,6 +261,54 @@ async def upload_document(file: Annotated[UploadFile, File(...)]) -> dict[str, o
     }
 
 
+@app.post("/api/page-image")
+async def upload_page_image(file: Annotated[UploadFile, File(...)]) -> dict[str, object]:
+    """Normalize a raster image into one or more insertable PDF pages."""
+
+    filename = file.filename or "inserted-image"
+    image_id = uuid4()
+    target = UPLOAD_ROOT / f"{image_id}.inserted.pdf"
+    incoming = UPLOAD_ROOT / f"{image_id}.inserted.upload"
+    bytes_written = 0
+    UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+    try:
+        with incoming.open("wb") as output:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                bytes_written += len(chunk)
+                if bytes_written > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="Inserted images must be 50 MB or smaller.")
+                output.write(chunk)
+        if bytes_written == 0:
+            raise HTTPException(status_code=400, detail="The inserted image is empty.")
+        source_format, _ = image_to_pdf(incoming, target)
+        page_count, pages = get_pdf_info(target)
+    except HTTPException:
+        target.unlink(missing_ok=True)
+        raise
+    except UnsupportedImageError as exc:
+        target.unlink(missing_ok=True)
+        logger.info("Rejected inserted page image %s: %s", filename, exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        target.unlink(missing_ok=True)
+        logger.info("Rejected inserted page image %s: %s", filename, exc)
+        raise HTTPException(status_code=400, detail=f"Could not read this image: {exc}") from exc
+    finally:
+        incoming.unlink(missing_ok=True)
+        await file.close()
+
+    return {
+        "image_id": str(image_id),
+        "source_format": source_format,
+        "page_count": page_count,
+        "pages": pages,
+        "filename": filename,
+    }
+
+
 @app.get("/api/document/{file_id}")
 def uploaded_document(file_id: UUID) -> FileResponse:
     """Serve the normalized PDF used by the browser's PDF.js preview."""
@@ -198,12 +320,23 @@ def uploaded_document(file_id: UUID) -> FileResponse:
     )
 
 
+@app.get("/api/page-image/{image_id}")
+def inserted_image_document(image_id: UUID) -> FileResponse:
+    """Serve normalized image pages to the browser preview."""
+
+    return FileResponse(
+        _path_for_inserted_image(image_id),
+        media_type="application/pdf",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.post("/api/preview")
 def preview(request: WatermarkRequest) -> Response:
-    path = _path_for_file(request.file_id)
+    document = _document_for_request(request)
     settings = _settings_or_422(request)
     try:
-        png = render_preview_png(path, settings)
+        png = render_preview_png(document, settings)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
@@ -214,10 +347,10 @@ def preview(request: WatermarkRequest) -> Response:
 
 @app.post("/api/generate")
 def generate(request: WatermarkRequest) -> Response:
-    path = _path_for_file(request.file_id)
+    document = _document_for_request(request)
     settings = _settings_or_422(request)
     try:
-        pdf = watermark_pdf(path, settings)
+        pdf = watermark_pdf(document, settings)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:

@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from fastapi import UploadFile
 from PIL import Image
+from pypdf import PdfReader
 from reportlab.pdfgen import canvas
 
 from backend import main
@@ -134,6 +135,59 @@ class ImageUploadTests(unittest.TestCase):
 
             self.assertTrue(pdf.startswith(b"%PDF-1.4"))
             self.assertTrue(preview.startswith(b"\x89PNG\r\n\x1a\n"))
+
+    def test_inserted_image_pages_can_be_reordered_in_export(self) -> None:
+        document_payload = io.BytesIO()
+        document = canvas.Canvas(document_payload, pagesize=(300, 200))
+        document.drawString(20, 180, "Source page one")
+        document.showPage()
+        document.setPageSize((400, 250))
+        document.drawString(20, 230, "Source page two")
+        document.showPage()
+        document.save()
+
+        image_payload = io.BytesIO()
+        image = Image.new("RGB", (160, 80), "#1d4ed8")
+        image.save(image_payload, format="PNG")
+        image.close()
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(main, "UPLOAD_ROOT", Path(directory)):
+                document_file = tempfile.SpooledTemporaryFile()
+                document_file.write(document_payload.getvalue())
+                document_file.seek(0)
+                document_upload = UploadFile(filename="document.pdf", file=document_file)
+                document_data = asyncio.run(main.upload_document(document_upload))
+
+                image_file = tempfile.SpooledTemporaryFile()
+                image_file.write(image_payload.getvalue())
+                image_file.seek(0)
+                image_upload = UploadFile(filename="inserted.png", file=image_file)
+                image_data = asyncio.run(main.upload_page_image(image_upload))
+
+                request = main.WatermarkRequest(
+                    file_id=document_data["file_id"],
+                    text="ORDERED",
+                    font="Kanit",
+                    page_order=[
+                        {"source_page": 2},
+                        {"image_id": image_data["image_id"], "image_page": 1},
+                        {"source_page": 1},
+                    ],
+                )
+                preview = main.preview(request)
+                generated = main.generate(request)
+
+                self.assertEqual(image_data["source_format"], "PNG")
+                self.assertEqual(image_data["page_count"], 1)
+                self.assertTrue(bytes(preview.body).startswith(b"\x89PNG"))
+                self.assertTrue(bytes(generated.body).startswith(b"%PDF-1.4"))
+                reader = PdfReader(io.BytesIO(bytes(generated.body)))
+                dimensions = [
+                    (round(float(page.mediabox.width)), round(float(page.mediabox.height)))
+                    for page in reader.pages
+                ]
+                self.assertEqual(dimensions, [(400, 250), (120, 60), (300, 200)])
 
     def test_rejects_non_image(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

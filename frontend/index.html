@@ -63,7 +63,7 @@
             <div class="section-heading">
               <div>
                 <p class="section-kicker">02</p>
-                <h2>Shape your watermark</h2>
+                <h2>Shape your text mark</h2>
               </div>
               <span class="live-indicator"><span></span> Live</span>
             </div>
@@ -113,6 +113,40 @@
             </div>
           </div>
 
+          <div class="control-card image-card" id="image-card" aria-disabled="true">
+            <div class="section-heading">
+              <div>
+                <p class="section-kicker">03</p>
+                <h2>Insert image pages</h2>
+              </div>
+              <span class="file-limit">Optional</span>
+            </div>
+
+            <label class="image-dropzone" id="image-dropzone" for="page-image-input" tabindex="0">
+              <input id="page-image-input" type="file" multiple accept="image/jpeg,image/png,image/webp,image/tiff,image/gif,image/bmp,.jpg,.jpeg,.png,.webp,.tif,.tiff,.gif,.bmp" />
+              <span class="image-drop-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <circle cx="8.5" cy="9" r="1.5" />
+                  <path d="m4 17 4.5-4.5 3 3 2.5-2.5 6 5" />
+                </svg>
+              </span>
+              <span>
+                <strong>Drop images to add pages</strong>
+                <small>or browse · drop between preview pages to place</small>
+              </span>
+            </label>
+
+            <div class="image-summary" id="image-summary" hidden>
+              <span class="inserted-page-badge" aria-hidden="true">＋</span>
+              <span class="file-summary-copy">
+                <strong id="inserted-page-count">No image pages inserted</strong>
+                <span>Drag any preview page to change its position</span>
+              </span>
+              <button class="text-button" id="remove-inserted-pages" type="button">Remove all</button>
+            </div>
+          </div>
+
           <div class="privacy-note">
             <span class="lock-icon" aria-hidden="true">⌑</span>
             <span>Files stay in a short-lived server temp folder and are swept after one hour.</span>
@@ -145,7 +179,7 @@
             <div class="pdf-stage" id="pdf-stage" hidden>
               <div class="pdf-pages" id="pdf-pages" aria-label="All pages of uploaded document"></div>
             </div>
-            <div class="preview-caption" id="preview-caption" hidden><span id="preview-page-count">All pages</span><span id="preview-caption-note">Live while you edit · exact check runs automatically</span></div>
+            <div class="preview-caption" id="preview-caption" hidden><span id="preview-page-count">All pages</span><span id="preview-caption-note">Drop images between pages · drag pages to reorder</span></div>
           </div>
 
           <div class="preview-actions">
@@ -156,10 +190,10 @@
         </section>
       </main>
 
-      <footer class="footer"><span>Centered by math, rendered as vector.</span><span>WatermarkPDF · v1</span></footer>
+      <footer class="footer"><span>Centered by math, arranged by you.</span><span>WatermarkPDF · v1</span></footer>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="/app.js?v=images-1"></script>
+    <script src="/app.js?v=image-pages-1"></script>
   </body>
 </html>

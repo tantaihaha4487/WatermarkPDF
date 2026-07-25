@@ -2,6 +2,7 @@
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const SUPPORTED_FILE_EXTENSIONS = /\.(pdf|jpe?g|png|webp|tiff?|gif|bmp)$/i;
+const SUPPORTED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp|tiff?|gif|bmp)$/i;
 const SUPPORTED_FILE_TYPES = new Set([
   "application/pdf",
   "image/jpeg",
@@ -31,6 +32,12 @@ const elements = {
   colorPicker: document.querySelector("#color-picker"),
   colorValue: document.querySelector("#color-value"),
   swatches: [...document.querySelectorAll(".swatch")],
+  imageCard: document.querySelector("#image-card"),
+  imageInput: document.querySelector("#page-image-input"),
+  imageDropzone: document.querySelector("#image-dropzone"),
+  imageSummary: document.querySelector("#image-summary"),
+  insertedPageCount: document.querySelector("#inserted-page-count"),
+  removeInsertedPages: document.querySelector("#remove-inserted-pages"),
   pdfInfo: document.querySelector("#pdf-info"),
   pageInfo: document.querySelector("#page-info"),
   previewEmpty: document.querySelector("#preview-empty"),
@@ -56,6 +63,10 @@ const state = {
   serverRequest: null,
   serverRequestVersion: 0,
   resizeTimer: null,
+  pageOrder: [],
+  insertedDocuments: new Map(),
+  newlyInsertedKeys: new Set(),
+  draggedPageKey: null,
 };
 
 if (window.pdfjsLib) {
@@ -84,9 +95,12 @@ function updateActionButtons() {
 
 function setControlsEnabled(enabled) {
   elements.settingsCard.setAttribute("aria-disabled", String(!enabled));
+  elements.imageCard.setAttribute("aria-disabled", String(!enabled));
   [elements.text, elements.opacity, elements.rotation, elements.font, elements.fontSize, elements.colorPicker, ...elements.swatches].forEach((control) => {
     control.disabled = !enabled;
   });
+  elements.imageInput.disabled = !enabled;
+  elements.imageDropzone.tabIndex = enabled ? 0 : -1;
   updateActionButtons();
 }
 
@@ -105,6 +119,9 @@ function formatPageSize(page) {
 }
 
 function settingsPayload() {
+  const hasCustomPageOrder = state.pageOrder.some((page, index) => (
+    page.kind !== "source" || page.pageNumber !== index + 1
+  ));
   return {
     file_id: state.fileId,
     text: elements.text.value,
@@ -113,6 +130,13 @@ function settingsPayload() {
     font: elements.font.value,
     font_size: Number(elements.fontSize.value),
     color: elements.colorPicker.value.toUpperCase(),
+    page_order: hasCustomPageOrder
+      ? state.pageOrder.map((page) => (
+        page.kind === "source"
+          ? { source_page: page.pageNumber }
+          : { image_id: page.imageId, image_page: page.pageNumber }
+      ))
+      : null,
   };
 }
 
@@ -201,26 +225,53 @@ async function loadClientPdf(fileId) {
   if (!response.ok) throw new Error(await readError(response));
   const buffer = await response.arrayBuffer();
   state.pdfDocument = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+  state.pageOrder = Array.from({ length: state.pdfDocument.numPages }, (_, index) => ({
+    key: `source:${index + 1}`,
+    kind: "source",
+    pageNumber: index + 1,
+    document: state.pdfDocument,
+  }));
+}
+
+async function loadInsertedPdf(imageId) {
+  const response = await fetch(`/api/page-image/${encodeURIComponent(imageId)}`, { cache: "no-store" });
+  if (!response.ok) throw new Error(await readError(response));
+  const buffer = await response.arrayBuffer();
+  return pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+}
+
+function updateInsertedPagesSummary() {
+  const insertedCount = state.pageOrder.filter((page) => page.kind === "image").length;
+  elements.imageSummary.hidden = insertedCount === 0;
+  elements.insertedPageCount.textContent = `${insertedCount} image ${insertedCount === 1 ? "page" : "pages"} inserted`;
+  elements.previewPageCount.textContent = `${state.pageOrder.length} ${state.pageOrder.length === 1 ? "page" : "pages"}`;
+  if (state.fileId && state.pages.length) {
+    const insertedNote = insertedCount ? ` · ${insertedCount} inserted` : "";
+    elements.pageInfo.textContent = `${state.pageOrder.length} ${state.pageOrder.length === 1 ? "page" : "pages"}${insertedNote} · first source page ${formatPageSize(state.pages[0])}`;
+  }
 }
 
 async function renderAllPages() {
   if (!state.pdfDocument) return;
   const renderVersion = ++state.renderVersion;
-  const pageCount = state.pdfDocument.numPages;
+  const pageCount = state.pageOrder.length;
   const availableWidth = Math.max(280, elements.pdfStage.clientWidth - 44);
   elements.pages.replaceChildren();
-  elements.previewPageCount.textContent = `${pageCount} ${pageCount === 1 ? "page" : "pages"}`;
+  updateInsertedPagesSummary();
   setRendererStatus(`Rendering ${pageCount} ${pageCount === 1 ? "page" : "pages"}…`, "pending");
 
-  for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+  for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
     if (renderVersion !== state.renderVersion) return;
-    const page = await state.pdfDocument.getPage(pageNumber);
+    const pageRecord = state.pageOrder[pageIndex];
+    const page = await pageRecord.document.getPage(pageRecord.pageNumber);
     const baseViewport = page.getViewport({ scale: 1 });
     const scale = Math.min(1.45, availableWidth / baseViewport.width);
     const viewport = page.getViewport({ scale });
 
     const frame = document.createElement("div");
     frame.className = "pdf-page-frame";
+    frame.dataset.pageKey = pageRecord.key;
+    const shouldAnimate = state.newlyInsertedKeys.has(pageRecord.key);
     const shell = document.createElement("div");
     shell.className = "pdf-page-shell";
     shell.style.width = `${Math.ceil(viewport.width)}px`;
@@ -228,7 +279,7 @@ async function renderAllPages() {
 
     const canvas = document.createElement("canvas");
     canvas.className = "pdf-page-canvas";
-    canvas.setAttribute("aria-label", `Page ${pageNumber} of uploaded document`);
+    canvas.setAttribute("aria-label", `Page ${pageIndex + 1} of arranged document`);
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
     canvas.style.width = `${Math.ceil(viewport.width)}px`;
@@ -239,15 +290,39 @@ async function renderAllPages() {
     watermark.setAttribute("aria-hidden", "true");
     shell.append(canvas, watermark);
 
-    const pageLabel = document.createElement("div");
+    const pageFooter = document.createElement("div");
+    pageFooter.className = "pdf-page-footer";
+    const pageLabel = document.createElement("span");
     pageLabel.className = "pdf-page-label";
-    pageLabel.textContent = `Page ${pageNumber} of ${pageCount}`;
-    frame.append(shell, pageLabel);
+    pageLabel.textContent = `Page ${pageIndex + 1} of ${pageCount}${pageRecord.kind === "image" ? " · image" : ""}`;
+    const dragHandle = document.createElement("button");
+    dragHandle.type = "button";
+    dragHandle.className = "page-drag-handle";
+    dragHandle.draggable = true;
+    dragHandle.dataset.pageKey = pageRecord.key;
+    dragHandle.setAttribute("aria-label", `Move page ${pageIndex + 1}. Drag, or use Shift and arrow keys.`);
+    dragHandle.textContent = "⠿ Move";
+    pageFooter.append(pageLabel, dragHandle);
+    if (pageRecord.kind === "image") {
+      const removePage = document.createElement("button");
+      removePage.type = "button";
+      removePage.className = "remove-page-button";
+      removePage.dataset.pageKey = pageRecord.key;
+      removePage.setAttribute("aria-label", `Remove inserted image page ${pageIndex + 1}`);
+      removePage.textContent = "Remove";
+      pageFooter.append(removePage);
+    }
+    frame.append(shell, pageFooter);
     elements.pages.append(frame);
 
     await page.render({ canvasContext: canvas.getContext("2d", { alpha: false }), viewport }).promise;
     page.cleanup();
     updateWatermarkElement(watermark);
+    if (shouldAnimate) {
+      void frame.offsetWidth;
+      frame.classList.add("is-inserting");
+    }
+    state.newlyInsertedKeys.delete(pageRecord.key);
   }
 
   if (renderVersion === state.renderVersion) setRendererStatus("Instant preview · exact check automatic", "ready");
@@ -299,7 +374,104 @@ async function uploadFile(file) {
   }
 }
 
+async function uploadPageImages(files, insertIndex = state.pageOrder.length) {
+  const images = [...files].filter(Boolean);
+  if (!images.length || !state.fileId) return;
+  for (const file of images) {
+    const isSupportedImage = file.type.startsWith("image/") || SUPPORTED_IMAGE_EXTENSIONS.test(file.name);
+    if (!isSupportedImage) {
+      showStatus(`${file.name} is not a supported image.`, "error");
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      showStatus(`${file.name} is larger than 50 MB.`, "error");
+      return;
+    }
+  }
+
+  elements.imageDropzone.classList.add("uploading");
+  showStatus(`Preparing ${images.length} image ${images.length === 1 ? "page" : "pages"}…`);
+  let nextIndex = Math.min(Math.max(insertIndex, 0), state.pageOrder.length);
+  let insertedCount = 0;
+  try {
+    for (const file of images) {
+      const formData = new FormData();
+      formData.append("file", file, file.name);
+      const response = await fetch("/api/page-image", { method: "POST", body: formData });
+      if (!response.ok) throw new Error(await readError(response));
+      const data = await response.json();
+      const document = await loadInsertedPdf(data.image_id);
+      state.insertedDocuments.set(data.image_id, document);
+      const records = Array.from({ length: data.page_count }, (_, index) => ({
+        key: `image:${data.image_id}:${index + 1}`,
+        kind: "image",
+        imageId: data.image_id,
+        pageNumber: index + 1,
+        document,
+        filename: file.name,
+      }));
+      records.forEach((record) => state.newlyInsertedKeys.add(record.key));
+      state.pageOrder.splice(nextIndex, 0, ...records);
+      nextIndex += records.length;
+      insertedCount += records.length;
+    }
+    await renderAllPages();
+    elements.captionNote.textContent = "Drag any page to change its position";
+    setRendererStatus("Updating exact check…", "pending");
+    scheduleServerPreview();
+    showStatus(`${insertedCount} image ${insertedCount === 1 ? "page" : "pages"} inserted. Drag to reorder.`, "success");
+  } catch (error) {
+    await renderAllPages();
+    showStatus(error.message || "Could not insert those image pages.", "error");
+  } finally {
+    elements.imageDropzone.classList.remove("uploading");
+    elements.imageInput.value = "";
+  }
+}
+
+function cleanupUnusedInsertedDocuments() {
+  for (const [imageId, document] of state.insertedDocuments.entries()) {
+    const stillUsed = state.pageOrder.some((page) => page.imageId === imageId);
+    if (!stillUsed) {
+      document.destroy().catch(() => {});
+      state.insertedDocuments.delete(imageId);
+    }
+  }
+}
+
+async function removeInsertedPage(pageKey, showMessage = true) {
+  const index = state.pageOrder.findIndex((page) => page.key === pageKey && page.kind === "image");
+  if (index < 0) return;
+  state.pageOrder.splice(index, 1);
+  cleanupUnusedInsertedDocuments();
+  await renderAllPages();
+  setRendererStatus("Updating exact check…", "pending");
+  scheduleServerPreview();
+  if (showMessage) showStatus("Inserted image page removed.");
+}
+
+async function resetInsertedPages(showMessage = true) {
+  state.pageOrder = state.pageOrder.filter((page) => page.kind === "source");
+  cleanupUnusedInsertedDocuments();
+  state.newlyInsertedKeys.clear();
+  elements.imageInput.value = "";
+  elements.captionNote.textContent = "Drop images between pages · drag pages to reorder";
+  if (state.pdfDocument) await renderAllPages();
+  if (state.fileId) {
+    setRendererStatus("Updating exact check…", "pending");
+    scheduleServerPreview();
+  }
+  if (showMessage) showStatus("All inserted image pages removed.");
+}
+
 function resetFile(showMessage = true) {
+  state.pageOrder = [];
+  state.newlyInsertedKeys.clear();
+  for (const document of state.insertedDocuments.values()) document.destroy().catch(() => {});
+  state.insertedDocuments.clear();
+  state.draggedPageKey = null;
+  elements.imageInput.value = "";
+  elements.imageSummary.hidden = true;
   state.file = null;
   state.fileId = null;
   state.pages = [];
@@ -342,7 +514,9 @@ async function requestServerPreview() {
     await response.blob();
     if (version !== state.serverRequestVersion) return;
     setRendererStatus("Exact check complete", "checked");
-    elements.captionNote.textContent = "Live on every page · server checked automatically";
+    elements.captionNote.textContent = state.pageOrder.some((page) => page.kind === "image")
+      ? "Page order checked · drag any page to adjust"
+      : "Drop images between pages · drag pages to reorder";
   } catch (error) {
     if (error.name !== "AbortError") {
       setRendererStatus("Live preview", "ready");
@@ -359,7 +533,7 @@ let serverPreviewTimer;
 function scheduleServerPreview() {
   if (!state.fileId) return;
   window.clearTimeout(serverPreviewTimer);
-  if (!normalizedWatermarkText().trim()) {
+  if (!canProcessPdf()) {
     if (state.serverRequest) state.serverRequest.abort();
     setRendererStatus("Enter watermark text", "ready");
     updateActionButtons();
@@ -373,7 +547,7 @@ async function generatePdf() {
   elements.generate.disabled = true;
   elements.refreshPreview.disabled = true;
   elements.generateLabel.textContent = "Preparing PDF…";
-  showStatus("Applying the watermark to every page…");
+  showStatus("Arranging pages and applying the watermark…");
   try {
     const response = await fetch("/api/generate", {
       method: "POST",
@@ -420,11 +594,129 @@ elements.dropzone.addEventListener("keydown", (event) => {
 }));
 elements.dropzone.addEventListener("drop", (event) => uploadFile(event.dataTransfer.files[0]));
 
+elements.imageInput.addEventListener("change", (event) => uploadPageImages(event.target.files));
+elements.removeInsertedPages.addEventListener("click", () => resetInsertedPages());
+elements.imageDropzone.addEventListener("keydown", (event) => {
+  if ((event.key === "Enter" || event.key === " ") && !elements.imageInput.disabled) {
+    event.preventDefault();
+    elements.imageInput.click();
+  }
+});
+["dragenter", "dragover"].forEach((eventName) => elements.imageDropzone.addEventListener(eventName, (event) => {
+  if (elements.imageInput.disabled) return;
+  event.preventDefault();
+  elements.imageDropzone.classList.add("dragging");
+}));
+["dragleave", "drop"].forEach((eventName) => elements.imageDropzone.addEventListener(eventName, (event) => {
+  event.preventDefault();
+  elements.imageDropzone.classList.remove("dragging");
+}));
+elements.imageDropzone.addEventListener("drop", (event) => {
+  if (!elements.imageInput.disabled) uploadPageImages(event.dataTransfer.files);
+});
+
+function clearPageDropTargets() {
+  elements.pages.querySelectorAll(".insert-before, .insert-after").forEach((frame) => {
+    frame.classList.remove("insert-before", "insert-after");
+  });
+  elements.pages.classList.remove("insert-at-end");
+}
+
+function pageDropBoundary(event) {
+  const frames = [...elements.pages.querySelectorAll(".pdf-page-frame")];
+  const nextIndex = frames.findIndex((frame) => {
+    const rect = frame.getBoundingClientRect();
+    return event.clientY < rect.top + rect.height / 2;
+  });
+  return nextIndex < 0 ? frames.length : nextIndex;
+}
+
+function showPageDropTarget(boundary) {
+  clearPageDropTargets();
+  const frames = [...elements.pages.querySelectorAll(".pdf-page-frame")];
+  if (!frames.length || boundary >= frames.length) {
+    elements.pages.classList.add("insert-at-end");
+    return;
+  }
+  frames[boundary].classList.add("insert-before");
+}
+
+async function movePageToIndex(pageKey, targetIndex) {
+  const oldIndex = state.pageOrder.findIndex((page) => page.key === pageKey);
+  if (oldIndex < 0) return;
+  const finalIndex = Math.min(Math.max(targetIndex, 0), state.pageOrder.length - 1);
+  if (oldIndex === finalIndex) return;
+  const [page] = state.pageOrder.splice(oldIndex, 1);
+  state.pageOrder.splice(finalIndex, 0, page);
+  state.newlyInsertedKeys.add(page.key);
+  await renderAllPages();
+  setRendererStatus("Updating exact check…", "pending");
+  scheduleServerPreview();
+  showStatus(`Page moved to position ${finalIndex + 1}.`, "success");
+}
+
+elements.pages.addEventListener("dragstart", (event) => {
+  const handle = event.target.closest(".page-drag-handle");
+  if (!handle) return;
+  state.draggedPageKey = handle.dataset.pageKey;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("application/x-watermarkpdf-page", state.draggedPageKey);
+  window.requestAnimationFrame(() => {
+    handle.closest(".pdf-page-frame")?.classList.add("is-page-dragging");
+  });
+});
+elements.pages.addEventListener("dragend", () => {
+  state.draggedPageKey = null;
+  elements.pages.querySelectorAll(".is-page-dragging").forEach((frame) => frame.classList.remove("is-page-dragging"));
+  clearPageDropTargets();
+});
+elements.pages.addEventListener("dragover", (event) => {
+  if (!state.fileId) return;
+  const isPageMove = Boolean(state.draggedPageKey);
+  const isFileDrop = event.dataTransfer.types.includes("Files");
+  if (!isPageMove && !isFileDrop) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = isPageMove ? "move" : "copy";
+  const boundary = pageDropBoundary(event);
+  showPageDropTarget(boundary);
+});
+elements.pages.addEventListener("dragleave", (event) => {
+  if (!elements.pages.contains(event.relatedTarget)) clearPageDropTargets();
+});
+elements.pages.addEventListener("drop", (event) => {
+  if (!state.fileId) return;
+  const boundary = pageDropBoundary(event);
+  event.preventDefault();
+  clearPageDropTargets();
+  if (state.draggedPageKey) {
+    const oldIndex = state.pageOrder.findIndex((page) => page.key === state.draggedPageKey);
+    const finalIndex = boundary > oldIndex ? boundary - 1 : boundary;
+    const pageKey = state.draggedPageKey;
+    state.draggedPageKey = null;
+    movePageToIndex(pageKey, finalIndex);
+  } else if (event.dataTransfer.files.length) {
+    uploadPageImages(event.dataTransfer.files, boundary);
+  }
+});
+
+elements.pages.addEventListener("click", (event) => {
+  const removeButton = event.target.closest(".remove-page-button");
+  if (removeButton) removeInsertedPage(removeButton.dataset.pageKey);
+});
+elements.pages.addEventListener("keydown", (event) => {
+  const handle = event.target.closest(".page-drag-handle");
+  if (!handle || !event.shiftKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+  event.preventDefault();
+  const oldIndex = state.pageOrder.findIndex((page) => page.key === handle.dataset.pageKey);
+  const targetIndex = oldIndex + (event.key === "ArrowUp" ? -1 : 1);
+  movePageToIndex(handle.dataset.pageKey, targetIndex);
+});
+
 elements.font.addEventListener("change", () => { updateLiveWatermark(); setRendererStatus("Updating exact check…", "pending"); scheduleServerPreview(); });
 elements.text.addEventListener("input", () => {
   updateLiveWatermark();
   updateActionButtons();
-  if (normalizedWatermarkText().trim()) setRendererStatus("Updating exact check…", "pending");
+  if (canProcessPdf()) setRendererStatus("Updating exact check…", "pending");
   scheduleServerPreview();
 });
 elements.opacity.addEventListener("input", () => { updateLiveWatermark(); setRendererStatus("Updating exact check…", "pending"); scheduleServerPreview(); });
