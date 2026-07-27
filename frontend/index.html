@@ -3,197 +3,316 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f7f8fb" />
-    <title>WatermarkPDF — Centered document watermarking</title>
+    <meta name="theme-color" content="#fafafb" />
+    <title>WatermarkPDF — PDF watermark editor</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;700&family=Noto+Sans+Thai:wght@400&family=Prompt:wght@400&family=Roboto:wght@400&family=Sarabun:wght@400&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/style.css?v=workspace-1" />
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to editor</a>
+
     <div class="app-shell">
       <header class="topbar">
         <a class="brand" href="/" aria-label="WatermarkPDF home">
           <span class="brand-mark" aria-hidden="true">W</span>
-          <span>
-            <span class="brand-name">WatermarkPDF</span>
-            <span class="brand-tagline">A quiet signature for every page</span>
-          </span>
+          <span class="brand-name">WatermarkPDF</span>
         </a>
-        <div class="topbar-note"><span class="secure-dot"></span> Private by design</div>
+        <div class="topbar-note">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.7 2.9 8.6 7 10 4.1-1.4 7-5.3 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+          Private by design
+        </div>
       </header>
 
-      <main class="workspace">
-        <section class="control-panel" aria-label="Watermark controls">
-          <div class="panel-intro">
-            <p class="eyebrow">DOCUMENT WATERMARK STUDIO</p>
-            <h1>Make your document unmistakably yours.</h1>
-            <p class="intro-copy">Drop in a PDF or image, tune the mark, and export a crisp watermarked PDF in a few seconds.</p>
-          </div>
-
-          <div class="control-card upload-card">
-            <div class="section-heading">
-              <div>
-                <p class="section-kicker">01</p>
-                <h2>Choose a file</h2>
-              </div>
-              <span class="file-limit">50 MB max</span>
-            </div>
-            <label class="dropzone" id="dropzone" for="file-input" tabindex="0">
-              <input id="file-input" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/tiff,image/gif,image/bmp,.pdf,.jpg,.jpeg,.png,.webp,.tif,.tiff,.gif,.bmp" />
-              <span class="upload-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 20h14" />
-                </svg>
+      <section class="hero" id="editor-hero" aria-labelledby="hero-title">
+        <div class="hero-expanded">
+          <p class="eyebrow">PDF WATERMARK EDITOR</p>
+          <h1 id="hero-title">Watermark PDFs in seconds.</h1>
+          <p class="hero-copy">Add a text watermark, insert image pages, preview every change, and export a polished PDF.</p>
+          <div class="hero-actions">
+            <button class="hero-upload-button" id="hero-upload-button" type="button">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 20h14"/></svg>
+              Upload PDF or image
+            </button>
+            <div class="hero-assurance">
+              <span>
+                <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+                Private by design
               </span>
-              <span class="drop-title">Drop your PDF or image here</span>
-              <span class="drop-subtitle">JPEG, PNG, WebP, TIFF, GIF, BMP · or <span class="browse-link">browse files</span></span>
-            </label>
-            <div class="file-summary" id="file-summary" hidden>
-              <span class="pdf-badge" id="file-badge">PDF</span>
-              <span class="file-summary-copy">
-                <strong id="file-name">No file selected</strong>
-                <span id="file-meta">—</span>
-              </span>
-              <button class="icon-button" id="remove-file" type="button" aria-label="Remove file">×</button>
+              <span>No account required</span>
             </div>
           </div>
+        </div>
+        <div class="hero-compact" aria-live="polite">
+          <span class="compact-document-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5"/></svg>
+          </span>
+          <span>
+            <strong id="compact-file-name">Document ready</strong>
+            <small id="compact-file-meta">Live preview active</small>
+          </span>
+          <button class="compact-change-button" id="compact-change-button" type="button">Manage file</button>
+        </div>
+      </section>
 
-          <div class="control-card settings-card" id="settings-card" aria-disabled="true">
-            <div class="section-heading">
-              <div>
-                <p class="section-kicker">02</p>
-                <h2>Shape your text mark</h2>
+      <main class="workspace" id="main-content">
+        <aside class="editor-sidebar" aria-label="Editor controls">
+          <nav class="editor-steps" aria-label="Editing steps">
+            <button class="step-button active" type="button" data-editor-section="upload" aria-controls="section-upload" aria-current="step" aria-expanded="true">
+              <span class="step-indicator" aria-hidden="true">
+                <span class="step-dot"></span>
+                <svg class="step-check" viewBox="0 0 24 24"><path d="m6 12 4 4 8-9"/></svg>
+              </span>
+              <span>Upload</span>
+            </button>
+            <button class="step-button" type="button" data-editor-section="watermark" aria-controls="settings-card" aria-expanded="false" disabled>
+              <span class="step-indicator" aria-hidden="true">
+                <span class="step-dot"></span>
+                <svg class="step-check" viewBox="0 0 24 24"><path d="m6 12 4 4 8-9"/></svg>
+              </span>
+              <span>Watermark</span>
+            </button>
+            <button class="step-button" type="button" data-editor-section="pages" aria-controls="image-card" aria-expanded="false" disabled>
+              <span class="step-indicator" aria-hidden="true">
+                <span class="step-dot"></span>
+                <svg class="step-check" viewBox="0 0 24 24"><path d="m6 12 4 4 8-9"/></svg>
+              </span>
+              <span>Pages</span>
+            </button>
+            <button class="step-button" type="button" data-editor-section="export" aria-controls="section-export" aria-expanded="false" disabled>
+              <span class="step-indicator" aria-hidden="true">
+                <span class="step-dot"></span>
+                <svg class="step-check" viewBox="0 0 24 24"><path d="m6 12 4 4 8-9"/></svg>
+              </span>
+              <span>Export</span>
+            </button>
+          </nav>
+
+          <div class="sidebar-panels">
+            <section class="editor-section active upload-card" id="section-upload" data-section-panel="upload" aria-labelledby="upload-heading">
+              <div class="section-heading">
+                <div>
+                  <p class="section-label">DOCUMENT</p>
+                  <h2 id="upload-heading">Upload</h2>
+                </div>
+                <span class="file-limit">50 MB max</span>
               </div>
-              <span class="live-indicator"><span></span> Live</span>
-            </div>
 
-            <div class="field-group">
-              <label for="watermark-text">Watermark text</label>
-              <textarea id="watermark-text" rows="3" maxlength="5000" spellcheck="false">WatermarkPDF</textarea>
-              <p class="field-hint">Each line stays centered on the same axis.</p>
-            </div>
+              <label class="dropzone" id="dropzone" for="file-input" tabindex="0">
+                <input id="file-input" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/tiff,image/gif,image/bmp,.pdf,.jpg,.jpeg,.png,.webp,.tif,.tiff,.gif,.bmp" />
+                <span class="upload-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 20h14"/></svg>
+                </span>
+                <span class="drop-title">Drop PDF or image here</span>
+                <span class="drop-subtitle">or <span class="browse-link">choose a file</span></span>
+                <span class="supported-formats">PDF · PNG · JPEG · WebP · TIFF · GIF · BMP</span>
+              </label>
 
-            <div class="field-row">
+              <div class="file-summary" id="file-summary" hidden>
+                <span class="pdf-badge" id="file-badge">PDF</span>
+                <span class="file-summary-copy">
+                  <strong id="file-name">No file selected</strong>
+                  <span id="file-meta">—</span>
+                </span>
+                <button class="icon-button" id="remove-file" type="button" aria-label="Remove uploaded file">
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m18 6-12 12M6 6l12 12"/></svg>
+                </button>
+              </div>
+
+              <p class="form-error" id="file-error" role="alert" hidden></p>
+              <p class="section-help" id="workflow-preview">Upload once. Your controls and live preview will unlock automatically.</p>
+              <a class="preview-link" id="preview-link" href="#document-preview" hidden>Review document preview</a>
+            </section>
+
+            <section class="editor-section settings-card" id="settings-card" data-section-panel="watermark" aria-disabled="true" aria-labelledby="watermark-heading">
+              <div class="section-heading">
+                <div>
+                  <p class="section-label">TEXT MARK</p>
+                  <h2 id="watermark-heading">Watermark</h2>
+                </div>
+                <span class="live-indicator"><span></span> Live</span>
+              </div>
+
+              <div class="field-group">
+                <label for="watermark-text">Watermark text</label>
+                <textarea id="watermark-text" rows="3" maxlength="5000" spellcheck="false">WatermarkPDF</textarea>
+                <p class="field-hint">Every line remains centered on the page.</p>
+              </div>
+
               <div class="field-group compact-field">
                 <label for="opacity-range">Opacity <output id="opacity-value">30%</output></label>
                 <input id="opacity-range" type="range" min="0" max="100" step="1" value="30" />
               </div>
-              <div class="field-group compact-field">
-                <label for="rotation-range">Rotation <output id="rotation-value">315°</output></label>
-                <input id="rotation-range" type="range" min="0" max="360" step="1" value="315" />
-              </div>
-            </div>
 
-            <div class="field-row">
-              <div class="field-group">
-                <label for="font-select">Font</label>
-                <select id="font-select" aria-describedby="font-hint"></select>
-                <p class="field-hint" id="font-hint">Server fonts load from bundled TTF files.</p>
-              </div>
-              <div class="field-group size-field">
-                <label for="font-size">Size</label>
-                <div class="number-with-unit"><input id="font-size" type="number" min="8" max="200" step="1" value="40" /><span>pt</span></div>
-              </div>
-            </div>
+              <details class="advanced-settings">
+                <summary>
+                  <span>Appearance</span>
+                  <span class="summary-hint">Rotation, font, size, color</span>
+                </summary>
+                <div class="advanced-settings-body">
+                  <div class="field-group compact-field">
+                    <label for="rotation-range">Rotation <output id="rotation-value">315°</output></label>
+                    <input id="rotation-range" type="range" min="0" max="360" step="1" value="315" />
+                  </div>
 
-            <div class="field-group color-field">
-              <label>Color</label>
-              <div class="color-controls">
-                <div class="swatches" role="group" aria-label="Preset colors">
-                  <button class="swatch selected" type="button" data-color="#808080" aria-label="Gray" aria-pressed="true" style="--swatch: #808080"></button>
-                  <button class="swatch" type="button" data-color="#000000" aria-label="Black" aria-pressed="false" style="--swatch: #000000"></button>
-                  <button class="swatch" type="button" data-color="#E53E3E" aria-label="Red" aria-pressed="false" style="--swatch: #E53E3E"></button>
-                  <button class="swatch" type="button" data-color="#1D4ED8" aria-label="Blue" aria-pressed="false" style="--swatch: #1D4ED8"></button>
-                  <button class="swatch" type="button" data-color="#1D9E75" aria-label="Teal" aria-pressed="false" style="--swatch: #1D9E75"></button>
+                  <div class="field-row">
+                    <div class="field-group">
+                      <label for="font-select">Font</label>
+                      <select id="font-select" aria-describedby="font-hint"></select>
+                      <p class="field-hint" id="font-hint">Bundled for consistent output.</p>
+                    </div>
+                    <div class="field-group size-field">
+                      <label for="font-size">Size</label>
+                      <div class="number-with-unit"><input id="font-size" type="number" min="8" max="200" step="1" value="40" /><span>pt</span></div>
+                    </div>
+                  </div>
+
+                  <div class="field-group color-field">
+                    <label>Color</label>
+                    <div class="color-controls">
+                      <div class="swatches" role="group" aria-label="Preset colors">
+                        <button class="swatch selected" type="button" data-color="#808080" aria-label="Gray" aria-pressed="true" style="--swatch: #808080"></button>
+                        <button class="swatch" type="button" data-color="#000000" aria-label="Black" aria-pressed="false" style="--swatch: #000000"></button>
+                        <button class="swatch" type="button" data-color="#E53E3E" aria-label="Red" aria-pressed="false" style="--swatch: #E53E3E"></button>
+                        <button class="swatch" type="button" data-color="#1D4ED8" aria-label="Blue" aria-pressed="false" style="--swatch: #1D4ED8"></button>
+                        <button class="swatch" type="button" data-color="#1D9E75" aria-label="Teal" aria-pressed="false" style="--swatch: #1D9E75"></button>
+                      </div>
+                      <label class="custom-color" for="color-picker"><input id="color-picker" type="color" value="#808080" /><span>Custom</span></label>
+                    </div>
+                    <output class="hex-value" id="color-value">#808080</output>
+                  </div>
                 </div>
-                <label class="custom-color" for="color-picker"><input id="color-picker" type="color" value="#808080" /><span>Custom</span></label>
+              </details>
+            </section>
+
+            <section class="editor-section image-card" id="image-card" data-section-panel="pages" aria-disabled="true" aria-labelledby="pages-heading">
+              <div class="section-heading">
+                <div>
+                  <p class="section-label">DOCUMENT ORDER</p>
+                  <h2 id="pages-heading">Pages</h2>
+                </div>
+                <span class="file-limit">Optional</span>
               </div>
-              <output class="hex-value" id="color-value">#808080</output>
-            </div>
-          </div>
 
-          <div class="control-card image-card" id="image-card" aria-disabled="true">
-            <div class="section-heading">
-              <div>
-                <p class="section-kicker">03</p>
-                <h2>Insert image pages</h2>
+              <label class="image-dropzone" id="image-dropzone" for="page-image-input" tabindex="0">
+                <input id="page-image-input" type="file" multiple accept="image/jpeg,image/png,image/webp,image/tiff,image/gif,image/bmp,.jpg,.jpeg,.png,.webp,.tif,.tiff,.gif,.bmp" />
+                <span class="image-drop-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 4.5-4.5 3 3 2.5-2.5 6 5"/></svg>
+                </span>
+                <span>
+                  <strong>Add image pages</strong>
+                  <small>Browse or drop images between preview pages</small>
+                </span>
+              </label>
+
+              <div class="image-summary" id="image-summary" hidden>
+                <span class="inserted-page-badge" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                </span>
+                <span class="file-summary-copy">
+                  <strong id="inserted-page-count">No image pages inserted</strong>
+                  <span>Arrange them directly in the preview</span>
+                </span>
+                <button class="text-button" id="remove-inserted-pages" type="button">Remove all</button>
               </div>
-              <span class="file-limit">Optional</span>
-            </div>
 
-            <label class="image-dropzone" id="image-dropzone" for="page-image-input" tabindex="0">
-              <input id="page-image-input" type="file" multiple accept="image/jpeg,image/png,image/webp,image/tiff,image/gif,image/bmp,.jpg,.jpeg,.png,.webp,.tif,.tiff,.gif,.bmp" />
-              <span class="image-drop-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="4" width="18" height="16" rx="2" />
-                  <circle cx="8.5" cy="9" r="1.5" />
-                  <path d="m4 17 4.5-4.5 3 3 2.5-2.5 6 5" />
-                </svg>
-              </span>
-              <span>
-                <strong>Drop images to add pages</strong>
-                <small>or browse · drop between preview pages to place</small>
-              </span>
-            </label>
+              <p class="section-help">Drag any preview page to reorder it. Keyboard users can press Shift with the arrow keys.</p>
+            </section>
 
-            <div class="image-summary" id="image-summary" hidden>
-              <span class="inserted-page-badge" aria-hidden="true">＋</span>
-              <span class="file-summary-copy">
-                <strong id="inserted-page-count">No image pages inserted</strong>
-                <span>Drag any preview page to change its position</span>
-              </span>
-              <button class="text-button" id="remove-inserted-pages" type="button">Remove all</button>
-            </div>
+            <section class="editor-section export-section" id="section-export" data-section-panel="export" aria-labelledby="export-heading">
+              <div class="section-heading">
+                <div>
+                  <p class="section-label">FINAL PDF</p>
+                  <h2 id="export-heading">Export</h2>
+                </div>
+                <span class="export-ready waiting" id="export-ready"><span></span><span id="export-ready-text">Waiting</span></span>
+              </div>
+
+              <div class="export-summary">
+                <span class="export-summary-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M9 13h6M9 17h4"/></svg>
+                </span>
+                <span>
+                  <strong id="export-status">Upload a document to continue</strong>
+                  <small>Your page order and watermark are applied together.</small>
+                </span>
+              </div>
+
+              <button class="primary-button" id="generate-button" type="button" disabled>
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14"/></svg>
+                <span id="generate-label">Generate watermarked PDF</span>
+              </button>
+              <button class="secondary-button" id="refresh-preview" type="button" disabled hidden>Recheck preview</button>
+            </section>
           </div>
 
           <div class="privacy-note">
-            <span class="lock-icon" aria-hidden="true">⌑</span>
-            <span>Files stay in a short-lived server temp folder and are swept after one hour.</span>
+            <svg class="lock-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            <span>Temporary files are removed automatically after one hour.</span>
           </div>
-        </section>
+        </aside>
 
-        <section class="preview-panel" aria-label="Document preview">
+        <section class="preview-panel" aria-label="Document preview" id="document-preview">
           <div class="preview-header">
             <div>
-              <p class="eyebrow">PREVIEW</p>
-              <h2 id="preview-title">See it before you send it.</h2>
+              <p class="section-label">DOCUMENT VIEWER</p>
+              <h2 id="preview-title">Preview</h2>
             </div>
-            <div class="renderer-status" id="renderer-status" aria-live="polite">
-              <span class="renderer-status-dot"></span>
-              <span id="renderer-status-text">Instant preview</span>
+            <div class="viewer-toolbar" role="toolbar" aria-label="Preview zoom controls">
+              <button class="toolbar-button" id="zoom-out" type="button" aria-label="Zoom out" disabled>
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+              </button>
+              <output class="zoom-value" id="zoom-value" aria-live="polite">—</output>
+              <button class="toolbar-button" id="zoom-in" type="button" aria-label="Zoom in" disabled>
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <span class="toolbar-divider" aria-hidden="true"></span>
+              <button class="fit-button" id="fit-preview" type="button" disabled>Fit</button>
+              <button class="fit-button" id="actual-size" type="button" disabled>100%</button>
             </div>
           </div>
 
-          <div class="pdf-info" id="pdf-info" hidden>
-            <span class="status-pill"><span class="status-pill-dot"></span> File loaded</span>
-            <span id="page-info">—</span>
+          <div class="viewer-statusbar">
+            <div class="renderer-status" id="renderer-status" aria-live="polite">
+              <span class="renderer-status-dot"></span>
+              <span id="renderer-status-text">Waiting for document</span>
+            </div>
+            <div class="pdf-info" id="pdf-info" hidden>
+              <span id="page-info">—</span>
+            </div>
+            <span class="autosave-note">Preview updates automatically</span>
           </div>
 
           <div class="preview-card">
             <div class="preview-empty" id="preview-empty">
-              <div class="empty-mark" aria-hidden="true">✦</div>
-              <h3>Your preview will appear here</h3>
-              <p>Upload a PDF or image to see the watermark in context.</p>
+              <div class="empty-mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M9 13h6M9 17h4"/></svg>
+              </div>
+              <h3>Drop a PDF to begin</h3>
+              <p>Your document preview will appear here.</p>
+              <span>PDF · PNG · JPEG</span>
             </div>
             <div class="pdf-stage" id="pdf-stage" hidden>
               <div class="pdf-pages" id="pdf-pages" aria-label="All pages of uploaded document"></div>
             </div>
-            <div class="preview-caption" id="preview-caption" hidden><span id="preview-page-count">All pages</span><span id="preview-caption-note">Drop images between pages · drag pages to reorder</span></div>
+            <div class="preview-caption" id="preview-caption" hidden>
+              <span id="preview-page-count">All pages</span>
+              <span id="preview-caption-note">Drop images between pages · drag pages to reorder</span>
+            </div>
           </div>
 
-          <div class="preview-actions">
-            <button class="secondary-button" id="refresh-preview" type="button" disabled><span class="button-icon">↻</span> Refresh exact check</button>
-            <button class="primary-button" id="generate-button" type="button" disabled><span id="generate-label">Apply &amp; Download PDF</span><span class="arrow-icon" aria-hidden="true">→</span></button>
-          </div>
-          <p class="status-message" id="status-message" role="status" aria-live="polite"></p>
+          <p class="status-message" id="status-message" role="status" aria-live="polite" aria-atomic="true"></p>
         </section>
       </main>
 
-      <footer class="footer"><span>Centered by math, arranged by you.</span><span>WatermarkPDF · v1</span></footer>
+      <footer class="footer">
+        <span>No account required. Temporary files expire after one hour.</span>
+        <span>WatermarkPDF · v1</span>
+      </footer>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="/app.js?v=image-pages-1"></script>
+    <script src="/app.js?v=workspace-1"></script>
   </body>
 </html>

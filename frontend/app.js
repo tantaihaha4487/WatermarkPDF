@@ -14,9 +14,19 @@ const SUPPORTED_FILE_TYPES = new Set([
 ]);
 
 const elements = {
+  heroUpload: document.querySelector("#hero-upload-button"),
+  compactFileName: document.querySelector("#compact-file-name"),
+  compactFileMeta: document.querySelector("#compact-file-meta"),
+  compactChange: document.querySelector("#compact-change-button"),
+  stepButtons: [...document.querySelectorAll(".step-button")],
+  sectionPanels: [...document.querySelectorAll("[data-section-panel]")],
   fileInput: document.querySelector("#file-input"),
   dropzone: document.querySelector("#dropzone"),
   fileSummary: document.querySelector("#file-summary"),
+  uploadCard: document.querySelector(".upload-card"),
+  workflowPreview: document.querySelector("#workflow-preview"),
+  fileError: document.querySelector("#file-error"),
+  previewLink: document.querySelector("#preview-link"),
   fileName: document.querySelector("#file-name"),
   fileMeta: document.querySelector("#file-meta"),
   fileBadge: document.querySelector("#file-badge"),
@@ -48,6 +58,14 @@ const elements = {
   captionNote: document.querySelector("#preview-caption-note"),
   rendererStatus: document.querySelector("#renderer-status"),
   rendererStatusText: document.querySelector("#renderer-status-text"),
+  zoomOut: document.querySelector("#zoom-out"),
+  zoomIn: document.querySelector("#zoom-in"),
+  zoomValue: document.querySelector("#zoom-value"),
+  fitPreview: document.querySelector("#fit-preview"),
+  actualSize: document.querySelector("#actual-size"),
+  exportReady: document.querySelector("#export-ready"),
+  exportReadyText: document.querySelector("#export-ready-text"),
+  exportStatus: document.querySelector("#export-status"),
   refreshPreview: document.querySelector("#refresh-preview"),
   generate: document.querySelector("#generate-button"),
   generateLabel: document.querySelector("#generate-label"),
@@ -67,6 +85,10 @@ const state = {
   insertedDocuments: new Map(),
   newlyInsertedKeys: new Set(),
   draggedPageKey: null,
+  activeSection: "upload",
+  zoomMode: "fit",
+  zoomLevel: 1,
+  lastFitScale: 1,
 };
 
 if (window.pdfjsLib) {
@@ -74,13 +96,79 @@ if (window.pdfjsLib) {
 }
 
 function showStatus(message = "", kind = "") {
-  elements.status.textContent = message;
+  const isUploadError = kind === "error" && !state.fileId;
+  elements.status.textContent = isUploadError ? "" : message;
   elements.status.className = `status-message ${kind}`.trim();
+  elements.status.setAttribute("role", kind === "error" && !isUploadError ? "alert" : "status");
+  elements.fileError.textContent = isUploadError ? message : "";
+  elements.fileError.hidden = !isUploadError;
 }
 
 function setRendererStatus(message, kind = "ready") {
   elements.rendererStatusText.textContent = message;
   elements.rendererStatus.className = `renderer-status ${kind}`.trim();
+  elements.rendererStatus.setAttribute("aria-busy", String(kind === "pending"));
+}
+
+function selectEditorSection(section) {
+  const hasDocument = Boolean(state.fileId);
+  const target = !hasDocument && section !== "upload" ? "upload" : section;
+  state.activeSection = target;
+  elements.stepButtons.forEach((button) => {
+    const isActive = button.dataset.editorSection === target;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-expanded", String(isActive));
+    if (isActive) button.setAttribute("aria-current", "step");
+    else button.removeAttribute("aria-current");
+  });
+  elements.sectionPanels.forEach((panel) => {
+    const isActive = panel.dataset.sectionPanel === target;
+    panel.classList.toggle("active", isActive);
+    panel.hidden = !isActive;
+  });
+  updateStepStates();
+}
+
+function updateStepStates() {
+  const hasDocument = Boolean(state.fileId);
+  const insertedCount = state.pageOrder.filter((page) => page.kind === "image").length;
+  const completed = {
+    upload: hasDocument,
+    watermark: hasDocument && Boolean(normalizedWatermarkText().trim()),
+    pages: insertedCount > 0,
+    export: false,
+  };
+  elements.stepButtons.forEach((button) => {
+    const section = button.dataset.editorSection;
+    button.disabled = section !== "upload" && !hasDocument;
+    button.classList.toggle("complete", completed[section] && section !== state.activeSection);
+  });
+}
+
+function updateExportState() {
+  const ready = canProcessPdf();
+  elements.exportReady.classList.toggle("waiting", !ready);
+  elements.exportReadyText.textContent = ready ? "Ready" : "Waiting";
+  if (!state.fileId) elements.exportStatus.textContent = "Upload a document to continue";
+  else if (!normalizedWatermarkText().trim()) elements.exportStatus.textContent = "Enter watermark text to continue";
+  else elements.exportStatus.textContent = `${state.pageOrder.length} ${state.pageOrder.length === 1 ? "page" : "pages"} ready to export`;
+}
+
+function setDocumentUI(hasDocument) {
+  document.body.classList.toggle("has-document", hasDocument);
+  [elements.zoomOut, elements.zoomIn, elements.fitPreview, elements.actualSize].forEach((control) => {
+    control.disabled = !hasDocument;
+  });
+  if (hasDocument) {
+    elements.compactFileName.textContent = state.file?.name || "Document ready";
+    elements.compactFileMeta.textContent = elements.fileMeta.textContent || "Live preview active";
+  } else {
+    state.zoomMode = "fit";
+    state.zoomLevel = 1;
+    elements.zoomValue.textContent = "—";
+  }
+  updateStepStates();
+  updateExportState();
 }
 
 function canProcessPdf() {
@@ -91,11 +179,15 @@ function updateActionButtons() {
   const enabled = canProcessPdf();
   elements.refreshPreview.disabled = !enabled;
   elements.generate.disabled = !enabled;
+  updateStepStates();
+  updateExportState();
 }
 
 function setControlsEnabled(enabled) {
   elements.settingsCard.setAttribute("aria-disabled", String(!enabled));
   elements.imageCard.setAttribute("aria-disabled", String(!enabled));
+  elements.workflowPreview.hidden = enabled;
+  elements.previewLink.hidden = !enabled;
   [elements.text, elements.opacity, elements.rotation, elements.font, elements.fontSize, elements.colorPicker, ...elements.swatches].forEach((control) => {
     control.disabled = !enabled;
   });
@@ -187,7 +279,7 @@ function setColor(value, selectedSwatch = null) {
   if (elements.text.value !== textBeforeColorChange) elements.text.value = textBeforeColorChange;
   updateLiveWatermark();
   updateActionButtons();
-  setRendererStatus("Updating exact check…", "pending");
+  setRendererStatus("Checking preview…", "pending");
   scheduleServerPreview();
 }
 
@@ -249,13 +341,15 @@ function updateInsertedPagesSummary() {
     const insertedNote = insertedCount ? ` · ${insertedCount} inserted` : "";
     elements.pageInfo.textContent = `${state.pageOrder.length} ${state.pageOrder.length === 1 ? "page" : "pages"}${insertedNote} · first source page ${formatPageSize(state.pages[0])}`;
   }
+  updateStepStates();
+  updateExportState();
 }
 
 async function renderAllPages() {
   if (!state.pdfDocument) return;
   const renderVersion = ++state.renderVersion;
   const pageCount = state.pageOrder.length;
-  const availableWidth = Math.max(280, elements.pdfStage.clientWidth - 44);
+  const availableWidth = Math.max(280, elements.pdfStage.clientWidth - 56);
   elements.pages.replaceChildren();
   updateInsertedPagesSummary();
   setRendererStatus(`Rendering ${pageCount} ${pageCount === 1 ? "page" : "pages"}…`, "pending");
@@ -265,7 +359,17 @@ async function renderAllPages() {
     const pageRecord = state.pageOrder[pageIndex];
     const page = await pageRecord.document.getPage(pageRecord.pageNumber);
     const baseViewport = page.getViewport({ scale: 1 });
-    const scale = Math.min(1.45, availableWidth / baseViewport.width);
+    const fitScale = Math.min(1.45, availableWidth / baseViewport.width);
+    if (pageIndex === 0) {
+      state.lastFitScale = fitScale;
+      const displayedScale = state.zoomMode === "fit" ? fitScale : state.zoomLevel;
+      elements.zoomValue.textContent = `${Math.round(displayedScale * 100)}%`;
+      elements.fitPreview.classList.toggle("active", state.zoomMode === "fit");
+      elements.actualSize.classList.toggle("active", state.zoomMode === "custom" && state.zoomLevel === 1);
+      elements.fitPreview.setAttribute("aria-pressed", String(state.zoomMode === "fit"));
+      elements.actualSize.setAttribute("aria-pressed", String(state.zoomMode === "custom" && state.zoomLevel === 1));
+    }
+    const scale = state.zoomMode === "fit" ? fitScale : state.zoomLevel;
     const viewport = page.getViewport({ scale });
 
     const frame = document.createElement("div");
@@ -301,7 +405,7 @@ async function renderAllPages() {
     dragHandle.draggable = true;
     dragHandle.dataset.pageKey = pageRecord.key;
     dragHandle.setAttribute("aria-label", `Move page ${pageIndex + 1}. Drag, or use Shift and arrow keys.`);
-    dragHandle.textContent = "⠿ Move";
+    dragHandle.textContent = "Move page";
     pageFooter.append(pageLabel, dragHandle);
     if (pageRecord.kind === "image") {
       const removePage = document.createElement("button");
@@ -325,7 +429,7 @@ async function renderAllPages() {
     state.newlyInsertedKeys.delete(pageRecord.key);
   }
 
-  if (renderVersion === state.renderVersion) setRendererStatus("Instant preview · exact check automatic", "ready");
+  if (renderVersion === state.renderVersion) setRendererStatus("Live preview", "ready");
 }
 
 async function uploadFile(file) {
@@ -340,7 +444,8 @@ async function uploadFile(file) {
     return;
   }
 
-  showStatus("Reading your file…");
+  showStatus("Uploading and preparing your file…");
+  elements.uploadCard.setAttribute("aria-busy", "true");
   setControlsEnabled(false);
   try {
     const formData = new FormData();
@@ -363,14 +468,18 @@ async function uploadFile(file) {
     elements.pdfStage.hidden = false;
     elements.previewCaption.hidden = false;
     setControlsEnabled(true);
+    setDocumentUI(true);
+    selectEditorSection("watermark");
     await loadClientPdf(data.file_id);
     await renderAllPages();
     showStatus(`${data.source_type === "image" ? data.source_format : "PDF"} ready. Adjust the mark to your liking.`, "success");
-    setRendererStatus("Updating exact check…", "pending");
+    setRendererStatus("Checking preview…", "pending");
     requestServerPreview();
   } catch (error) {
     resetFile(false);
     showStatus(error.message || "Could not upload that file.", "error");
+  } finally {
+    elements.uploadCard.setAttribute("aria-busy", "false");
   }
 }
 
@@ -417,7 +526,7 @@ async function uploadPageImages(files, insertIndex = state.pageOrder.length) {
     }
     await renderAllPages();
     elements.captionNote.textContent = "Drag any page to change its position";
-    setRendererStatus("Updating exact check…", "pending");
+    setRendererStatus("Checking preview…", "pending");
     scheduleServerPreview();
     showStatus(`${insertedCount} image ${insertedCount === 1 ? "page" : "pages"} inserted. Drag to reorder.`, "success");
   } catch (error) {
@@ -445,7 +554,7 @@ async function removeInsertedPage(pageKey, showMessage = true) {
   state.pageOrder.splice(index, 1);
   cleanupUnusedInsertedDocuments();
   await renderAllPages();
-  setRendererStatus("Updating exact check…", "pending");
+  setRendererStatus("Checking preview…", "pending");
   scheduleServerPreview();
   if (showMessage) showStatus("Inserted image page removed.");
 }
@@ -458,7 +567,7 @@ async function resetInsertedPages(showMessage = true) {
   elements.captionNote.textContent = "Drop images between pages · drag pages to reorder";
   if (state.pdfDocument) await renderAllPages();
   if (state.fileId) {
-    setRendererStatus("Updating exact check…", "pending");
+    setRendererStatus("Checking preview…", "pending");
     scheduleServerPreview();
   }
   if (showMessage) showStatus("All inserted image pages removed.");
@@ -490,7 +599,9 @@ function resetFile(showMessage = true) {
   elements.previewCaption.hidden = true;
   elements.pages.replaceChildren();
   setControlsEnabled(false);
-  setRendererStatus("Instant preview", "ready");
+  setDocumentUI(false);
+  selectEditorSection("upload");
+  setRendererStatus("Waiting for document", "ready");
   if (showMessage) showStatus("File removed. Choose another when you are ready.");
 }
 
@@ -502,7 +613,7 @@ async function requestServerPreview() {
   const version = ++state.serverRequestVersion;
   if (state.serverRequest) state.serverRequest.abort();
   state.serverRequest = new AbortController();
-  setRendererStatus("Updating exact check…", "pending");
+  setRendererStatus("Checking preview…", "pending");
   try {
     const response = await fetch("/api/preview", {
       method: "POST",
@@ -513,9 +624,9 @@ async function requestServerPreview() {
     if (!response.ok) throw new Error(await readError(response));
     await response.blob();
     if (version !== state.serverRequestVersion) return;
-    setRendererStatus("Exact check complete", "checked");
+    setRendererStatus("Preview ready", "checked");
     elements.captionNote.textContent = state.pageOrder.some((page) => page.kind === "image")
-      ? "Page order checked · drag any page to adjust"
+      ? "Page order ready · drag any page to adjust"
       : "Drop images between pages · drag pages to reorder";
   } catch (error) {
     if (error.name !== "AbortError") {
@@ -546,7 +657,7 @@ async function generatePdf() {
   if (!canProcessPdf()) return;
   elements.generate.disabled = true;
   elements.refreshPreview.disabled = true;
-  elements.generateLabel.textContent = "Preparing PDF…";
+  elements.generateLabel.textContent = "Preparing your PDF…";
   showStatus("Arranging pages and applying the watermark…");
   try {
     const response = await fetch("/api/generate", {
@@ -571,10 +682,33 @@ async function generatePdf() {
   } catch (error) {
     showStatus(error.message || "Could not generate the PDF.", "error");
   } finally {
-    elements.generateLabel.textContent = "Apply & Download PDF";
+    elements.generateLabel.textContent = "Generate watermarked PDF";
     updateActionButtons();
   }
 }
+
+async function setPreviewZoom(mode, level = state.zoomLevel) {
+  if (!state.pdfDocument) return;
+  state.zoomMode = mode;
+  state.zoomLevel = Math.min(2, Math.max(.5, Math.round(level * 10) / 10));
+  await renderAllPages();
+}
+
+elements.heroUpload.addEventListener("click", () => elements.fileInput.click());
+elements.compactChange.addEventListener("click", () => selectEditorSection("upload"));
+elements.stepButtons.forEach((button) => {
+  button.addEventListener("click", () => selectEditorSection(button.dataset.editorSection));
+});
+elements.zoomOut.addEventListener("click", () => {
+  const currentScale = state.zoomMode === "fit" ? state.lastFitScale : state.zoomLevel;
+  setPreviewZoom("custom", currentScale - .1);
+});
+elements.zoomIn.addEventListener("click", () => {
+  const currentScale = state.zoomMode === "fit" ? state.lastFitScale : state.zoomLevel;
+  setPreviewZoom("custom", currentScale + .1);
+});
+elements.fitPreview.addEventListener("click", () => setPreviewZoom("fit"));
+elements.actualSize.addEventListener("click", () => setPreviewZoom("custom", 1));
 
 elements.fileInput.addEventListener("change", (event) => uploadFile(event.target.files[0]));
 elements.removeFile.addEventListener("click", () => resetFile(true));
@@ -650,7 +784,7 @@ async function movePageToIndex(pageKey, targetIndex) {
   state.pageOrder.splice(finalIndex, 0, page);
   state.newlyInsertedKeys.add(page.key);
   await renderAllPages();
-  setRendererStatus("Updating exact check…", "pending");
+  setRendererStatus("Checking preview…", "pending");
   scheduleServerPreview();
   showStatus(`Page moved to position ${finalIndex + 1}.`, "success");
 }
@@ -712,16 +846,16 @@ elements.pages.addEventListener("keydown", (event) => {
   movePageToIndex(handle.dataset.pageKey, targetIndex);
 });
 
-elements.font.addEventListener("change", () => { updateLiveWatermark(); setRendererStatus("Updating exact check…", "pending"); scheduleServerPreview(); });
+elements.font.addEventListener("change", () => { updateLiveWatermark(); setRendererStatus("Checking preview…", "pending"); scheduleServerPreview(); });
 elements.text.addEventListener("input", () => {
   updateLiveWatermark();
   updateActionButtons();
-  if (canProcessPdf()) setRendererStatus("Updating exact check…", "pending");
+  if (canProcessPdf()) setRendererStatus("Checking preview…", "pending");
   scheduleServerPreview();
 });
-elements.opacity.addEventListener("input", () => { updateLiveWatermark(); setRendererStatus("Updating exact check…", "pending"); scheduleServerPreview(); });
-elements.rotation.addEventListener("input", () => { updateLiveWatermark(); setRendererStatus("Updating exact check…", "pending"); scheduleServerPreview(); });
-elements.fontSize.addEventListener("input", () => { updateLiveWatermark(); setRendererStatus("Updating exact check…", "pending"); scheduleServerPreview(); });
+elements.opacity.addEventListener("input", () => { updateLiveWatermark(); setRendererStatus("Checking preview…", "pending"); scheduleServerPreview(); });
+elements.rotation.addEventListener("input", () => { updateLiveWatermark(); setRendererStatus("Checking preview…", "pending"); scheduleServerPreview(); });
+elements.fontSize.addEventListener("input", () => { updateLiveWatermark(); setRendererStatus("Checking preview…", "pending"); scheduleServerPreview(); });
 elements.colorPicker.addEventListener("input", () => setColor(elements.colorPicker.value));
 elements.swatches.forEach((swatch) => swatch.addEventListener("click", () => setColor(swatch.dataset.color, swatch)));
 elements.refreshPreview.addEventListener("click", requestServerPreview);
@@ -733,5 +867,7 @@ window.addEventListener("resize", () => {
 });
 
 setControlsEnabled(false);
+setDocumentUI(false);
+selectEditorSection("upload");
 updateLiveWatermark();
 loadFonts();
