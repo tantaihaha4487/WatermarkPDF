@@ -28,9 +28,24 @@ logger = logging.getLogger("watermarkpdf")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 UPLOAD_ROOT = Path("/tmp") / "watermarkpdf-uploads"
+DATA_ROOT = PROJECT_ROOT / "data"
+VISITS_FILE = DATA_ROOT / "visits.json"
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 UPLOAD_TTL_SECONDS = 60 * 60
 FILE_ID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+_visit_lock = asyncio.Lock()
+
+
+def _read_visit_count() -> int:
+    try:
+        return int(json.loads(VISITS_FILE.read_text(encoding="utf-8"))["count"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return 0
+
+
+def _write_visit_count(count: int) -> None:
+    DATA_ROOT.mkdir(parents=True, exist_ok=True)
+    VISITS_FILE.write_text(json.dumps({"count": count}), encoding="utf-8")
 
 
 def _cleanup_uploads(*, remove_all: bool = False) -> None:
@@ -190,6 +205,16 @@ def _document_for_request(request: WatermarkRequest) -> Path | bytes:
 @app.get("/api/fonts")
 def fonts_endpoint() -> list[dict[str, object]]:
     return available_fonts()
+
+
+@app.post("/api/visit")
+async def record_visit() -> dict[str, int]:
+    """Increment and return the site's all-time visit count."""
+
+    async with _visit_lock:
+        count = _read_visit_count() + 1
+        _write_visit_count(count)
+    return {"count": count}
 
 
 @app.post("/api/upload")

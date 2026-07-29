@@ -16,6 +16,8 @@ const SUPPORTED_FILE_TYPES = new Set([
 const elements = {
   hero: document.querySelector("#editor-hero"),
   heroUpload: document.querySelector("#hero-upload-button"),
+  visitCounter: document.querySelector("#visit-counter"),
+  visitCount: document.querySelector("#visit-count"),
   compactFileName: document.querySelector("#compact-file-name"),
   compactFileMeta: document.querySelector("#compact-file-meta"),
   compactChange: document.querySelector("#compact-change-button"),
@@ -290,6 +292,18 @@ async function readError(response) {
     return data.detail || "The request could not be completed.";
   } catch (_) {
     return `Request failed (${response.status}).`;
+  }
+}
+
+async function recordVisit() {
+  try {
+    const response = await fetch("/api/visit", { method: "POST" });
+    if (!response.ok) return;
+    const data = await response.json();
+    elements.visitCount.textContent = Number(data.count).toLocaleString();
+    elements.visitCounter.hidden = false;
+  } catch (_) {
+    // Visit counter is a non-essential nicety; fail silently offline.
   }
 }
 
@@ -887,3 +901,4 @@ setDocumentUI(false);
 selectEditorSection("upload");
 updateLiveWatermark();
 loadFonts();
+recordVisit();
