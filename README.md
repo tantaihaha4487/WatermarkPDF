@@ -17,7 +17,7 @@
   <a href="#quick-start"><img alt="Self-hosted deployment" src="https://img.shields.io/badge/Deployment-Self--hosted-3568DB"></a>
 </p>
 
-![WatermarkPDF editor with text watermark controls, image-page insertion, and a live document preview](assets/site.png)
+![WatermarkPDF's full-screen upload hero, shown before any document is loaded](assets/site.png)
 
 ## Contents
 
