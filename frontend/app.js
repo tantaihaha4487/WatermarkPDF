@@ -14,6 +14,7 @@ const SUPPORTED_FILE_TYPES = new Set([
 ]);
 
 const elements = {
+  hero: document.querySelector("#editor-hero"),
   heroUpload: document.querySelector("#hero-upload-button"),
   compactFileName: document.querySelector("#compact-file-name"),
   compactFileMeta: document.querySelector("#compact-file-meta"),
@@ -727,6 +728,21 @@ elements.dropzone.addEventListener("keydown", (event) => {
   elements.dropzone.classList.remove("dragging");
 }));
 elements.dropzone.addEventListener("drop", (event) => uploadFile(event.dataTransfer.files[0]));
+
+["dragenter", "dragover"].forEach((eventName) => elements.hero.addEventListener(eventName, (event) => {
+  if (state.fileId || !event.dataTransfer.types.includes("Files")) return;
+  event.preventDefault();
+  elements.hero.classList.add("dragging");
+}));
+["dragleave", "drop"].forEach((eventName) => elements.hero.addEventListener(eventName, (event) => {
+  if (eventName === "dragleave" && elements.hero.contains(event.relatedTarget)) return;
+  elements.hero.classList.remove("dragging");
+}));
+elements.hero.addEventListener("drop", (event) => {
+  if (state.fileId) return;
+  event.preventDefault();
+  uploadFile(event.dataTransfer.files[0]);
+});
 
 elements.imageInput.addEventListener("change", (event) => uploadPageImages(event.target.files));
 elements.removeInsertedPages.addEventListener("click", () => resetInsertedPages());
