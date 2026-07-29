@@ -2,6 +2,8 @@
 
 <p align="center"><strong>A quiet signature for every page.</strong></p>
 
+<p align="center">Built by <a href="https://github.com/tantaihaha4487">@tantaihaha4487</a></p>
+
 <p align="center">
   Add precise vector text watermarks, turn images into PDF pages, arrange the
   final document visually, and export it from a clean self-hosted editor.
@@ -45,6 +47,8 @@ server-side exact preview check.
 
 ## Highlights
 
+- **Full-screen landing hero** — a focused, centered upload screen greets new
+  visitors; the editor workspace only appears once a document is uploaded.
 - **Live all-page preview** — see the watermark across every page while editing.
 - **Precise vector text** — multiline text stays centered on one shared axis and
   rotates as a single rigid block.
@@ -60,6 +64,8 @@ server-side exact preview check.
   Roboto are registered locally for export.
 - **Short-lived uploads** — working files live in a temporary server directory
   and are automatically removed.
+- **Visit counter** — a small persistent counter on the landing hero tracks
+  total page loads.
 
 ## Quick start
 
@@ -168,6 +174,7 @@ Interactive OpenAPI documentation is available while the app is running:
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/fonts` | List registered export fonts and Thai capability |
+| `POST` | `/api/visit` | Increment and return the site's persistent visit count |
 | `POST` | `/api/upload` | Upload and normalize a source PDF or image |
 | `GET` | `/api/document/{file_id}` | Serve the normalized source document to PDF.js |
 | `POST` | `/api/page-image` | Upload and normalize an image into insertable pages |
@@ -217,6 +224,7 @@ WatermarkPDF/
 │   ├── main.py               # FastAPI routes and page assembly
 │   ├── requirements.txt      # Pinned Python dependencies
 │   └── watermark.py          # Vector watermark and exact preview pipeline
+├── data/                     # Persistent app state (e.g. visits.json), gitignored
 ├── frontend/
 │   ├── app.js                # Upload, preview, insertion, and reordering UI
 │   ├── index.html            # Editor markup
